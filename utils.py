@@ -60,6 +60,9 @@ def compute_features(df):
     df['ratio_median']  = df['inter_time_s'] / (df['median_inter'] + 1e-9)
     df['ratio_mean']    = df['inter_time_s'] / (df['mean_inter']   + 1e-9)
     df['z_score_inter'] = (df['inter_time_s'] - df['mean_inter']) / (df['std_inter'] + 1e-9)
+    # Ratio au maximum historique : est-ce le silence le plus long jamais vu dans cette alerte ?
+    # Signal fort : Pearson > Spearman sur inter_time_s → les valeurs extrêmes portent l'info
+    df['ratio_max']     = df['inter_time_s'] / (df['max_inter'] + 1e-9)
 
     df['inter_trend'] = grp['inter_time_s'].transform(
         lambda x: x.rolling(5, min_periods=2).apply(
@@ -74,13 +77,24 @@ def compute_features(df):
         lambda x: (x - x.min()).dt.total_seconds() / 60)
 
     # ── AMPLITUDE ───────────────────────────────────────────────────────────
-    df['amp_abs']       = df['amplitude'].abs()
-    df['is_positive']   = (df['amplitude'] > 0).astype(np.int8)
-    df['pct_pos_cumul'] = grp['is_positive'].transform(
+    # L'amplitude brute d'un éclair individuel est plate tout au long de l'alerte
+    # (confirmé EDA : médiane ~12 kA du début à la fin). Sa valeur réside uniquement
+    # dans les features dérivées : tendance, proportion positifs, fenêtres glissantes.
+    df['amp_abs']        = df['amplitude'].abs()
+    df['is_positive']    = (df['amplitude'] > 0).astype(np.int8)
+    df['pct_pos_cumul']  = grp['is_positive'].transform(
         lambda x: x.expanding().mean().shift(1).fillna(0))
-    df['pct_pos_last5'] = grp['is_positive'].transform(
+    df['pct_pos_last5']  = grp['is_positive'].transform(
         lambda x: x.rolling(5, min_periods=1).mean().shift(1).fillna(0))
-    df['amp_trend']     = grp['amplitude'].transform(
+    df['pct_pos_last10'] = grp['is_positive'].transform(
+        lambda x: x.rolling(10, min_periods=1).mean().shift(1).fillna(0))
+    # Tendance sur amplitude brute (signe inclus)
+    df['amp_trend']      = grp['amplitude'].transform(
+        lambda x: x.rolling(5, min_periods=2).apply(
+            lambda v: np.polyfit(np.arange(len(v)), v, 1)[0], raw=True
+        ).shift(1).fillna(0))
+    # Tendance sur amplitude absolue (intensité brute de l'orage)
+    df['amp_abs_trend']  = grp['amp_abs'].transform(
         lambda x: x.rolling(5, min_periods=2).apply(
             lambda v: np.polyfit(np.arange(len(v)), v, 1)[0], raw=True
         ).shift(1).fillna(0))
@@ -112,8 +126,11 @@ def compute_features(df):
     # maxis   = erreur de localisation théorique en km (feature séparée)
     df['az_dispersion'] = grp['azimuth'].transform(
         lambda x: x.rolling(10, min_periods=2).std().shift(1).fillna(0))
+    # Flag binaire : la distance est-elle en hausse sur les 5 derniers CG ?
+    # Capture la phase "sortie de zone" de la courbe en U observée dans l'EDA
+    df['dist_is_increasing'] = (df['dist_trend'] > 0).astype(np.int8)
 
-    # ── [NEW] CENTROÏDE XY + VECTEUR DE DÉPLACEMENT ─────────────────────────
+    # ── CENTROÏDE XY + VECTEUR DE DÉPLACEMENT ───────────────────────────────
     # Projection polaire → cartésienne (origine = aéroport)
     # x = Est, y = Nord  (convention géographique standard)
     az_rad      = np.radians(df['azimuth'])
@@ -136,11 +153,20 @@ def compute_features(df):
     df['centroid_dy']    = df['centroid_y_5'] - df['centroid_y_10']
     df['centroid_speed'] = np.sqrt(df['centroid_dx']**2 + df['centroid_dy']**2)
 
-    # Projection radiale : < 0 → le cœur se rapproche, > 0 → il s'éloigne
+    # Tendance de la distance du centroïde à l'aéroport (est-il en train de s'éloigner ?)
+    df['centroid_dist_trend'] = grp['centroid_dist_ap'].transform(
+        lambda x: x.rolling(5, min_periods=2).apply(
+            lambda v: np.polyfit(np.arange(len(v)), v, 1)[0], raw=True
+        ).shift(1).fillna(0))
+
+    # Projection radiale du déplacement centroïde sur la direction aéroport→centroïde_actuel
+    # CORRECTION : utiliser centroid_x_5 (position courante) et non centroid_x_10
+    # > 0 → le cœur s'éloigne de l'aéroport (signal de sortie de zone)
+    # < 0 → le cœur se rapproche (orage en approche)
     denom = df['centroid_dist_ap'] + 1e-9
     df['centroid_approach'] = (
-        df['centroid_x_10'] * df['centroid_dx'] +
-        df['centroid_y_10'] * df['centroid_dy']
+        df['centroid_x_5'] * df['centroid_dx'] +
+        df['centroid_y_5'] * df['centroid_dy']
     ) / denom
 
     # ── TEMPOREL & ENCODAGE ─────────────────────────────────────────────────
