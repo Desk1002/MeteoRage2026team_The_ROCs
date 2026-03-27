@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StormWatch — Dashboard Alertes Orage</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #080c14;
+  --bg2:       #0d1420;
+  --bg3:       #111827;
+  --border:    rgba(255,255,255,0.07);
+  --border2:   rgba(255,255,255,0.13);
+  --text:      #e8edf5;
+  --muted:     #6b7a95;
+  --accent:    #3b9eff;
+  --accent2:   #00d4aa;
+  --warn:      #f59e0b;
+  --danger:    #ef4444;
+  --safe:      #22c55e;
+  --mono:      'JetBrains Mono', monospace;
+  --display:   'Syne', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; overflow: hidden; }
+
+/* ── Layout ── */
+.app { display: grid; grid-template-rows: 52px 1fr; grid-template-columns: 260px 1fr 300px; height: 100vh; gap: 0; }
+.topbar { grid-column: 1 / -1; display: flex; align-items: center; padding: 0 20px; gap: 20px; background: var(--bg2); border-bottom: 1px solid var(--border); }
+.sidebar-left  { background: var(--bg2); border-right: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; gap: 0; }
+.main          { position: relative; background: var(--bg); overflow: hidden; }
+.sidebar-right { background: var(--bg2); border-left: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; }
+
+/* ── Topbar ── */
+.logo { font-family: var(--display); font-size: 18px; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; }
+.logo span { color: var(--accent2); }
+.topbar-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-left: auto; }
+.pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--safe); animation: pulse 2s infinite; }
+.pulse-dot.warn { background: var(--warn); }
+.pulse-dot.danger { background: var(--danger); animation: pulse-fast 0.8s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.85)} }
+@keyframes pulse-fast { 0%,100%{opacity:1} 50%{opacity:.3} }
+.clock { font-size: 12px; color: var(--accent); font-weight: 500; margin-left: 12px; }
+.ap-selector { display: flex; gap: 4px; margin-left: 16px; }
+.ap-btn { padding: 4px 10px; border: 1px solid var(--border2); border-radius: 4px; background: transparent; color: var(--muted); font-family: var(--mono); font-size: 11px; cursor: pointer; transition: .15s; }
+.ap-btn:hover, .ap-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ── Sections ── */
+.section { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.section-title { font-family: var(--display); font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+
+/* ── KPI cards ── */
+.kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.kpi { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+.kpi-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+.kpi-value { font-family: var(--display); font-size: 22px; font-weight: 800; line-height: 1; }
+.kpi-sub { font-size: 10px; color: var(--muted); margin-top: 3px; }
+.kpi.accent .kpi-value { color: var(--accent); }
+.kpi.warn   .kpi-value { color: var(--warn); }
+.kpi.danger .kpi-value { color: var(--danger); }
+.kpi.safe   .kpi-value { color: var(--safe); }
+
+/* ── Gauge ── */
+.gauge-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0; }
+.gauge-svg { width: 140px; height: 80px; }
+.gauge-label { font-family: var(--display); font-size: 28px; font-weight: 800; }
+.gauge-sublabel { font-size: 10px; color: var(--muted); }
+
+/* ── Alert status badge ── */
+.alert-badge { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 6px; border: 1px solid; margin-bottom: 8px; }
+.alert-badge.green  { background: rgba(34,197,94,.08);  border-color: rgba(34,197,94,.25);  color: var(--safe); }
+.alert-badge.orange { background: rgba(245,158,11,.08); border-color: rgba(245,158,11,.25); color: var(--warn); }
+.alert-badge.red    { background: rgba(239,68,68,.08);  border-color: rgba(239,68,68,.25);  color: var(--danger); }
+.badge-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.badge-dot.green  { background: var(--safe); }
+.badge-dot.orange { background: var(--warn); animation: pulse 1.5s infinite; }
+.badge-dot.red    { background: var(--danger); animation: pulse-fast .8s infinite; }
+.badge-text { font-family: var(--display); font-size: 12px; font-weight: 600; }
+
+/* ── Timeline ── */
+.timeline { display: flex; flex-direction: column; gap: 4px; max-height: 160px; overflow-y: auto; }
+.tl-item { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.tl-time { font-size: 10px; color: var(--muted); min-width: 45px; padding-top: 1px; }
+.tl-dot-col { display: flex; flex-direction: column; align-items: center; padding-top: 4px; }
+.tl-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.tl-content { flex: 1; }
+.tl-msg { font-size: 11px; color: var(--text); line-height: 1.4; }
+.tl-meta { font-size: 10px; color: var(--muted); }
+
+/* ── Polar canvas ── */
+#polar-canvas { display: block; width: 100%; height: 100%; }
+.canvas-overlay { position: absolute; inset: 0; pointer-events: none; }
+.overlay-label { position: absolute; font-size: 10px; color: var(--muted); font-family: var(--mono); }
+
+/* ── Progress bars ── */
+.progress-row { margin-bottom: 10px; }
+.progress-label { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 10px; color: var(--muted); }
+.progress-track { height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 2px; transition: width .6s ease; }
+
+/* ── Chart ── */
+#hist-canvas { width: 100%; height: 80px; display: block; }
+
+/* ── Feature importance ── */
+.feat-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.feat-name { font-size: 10px; color: var(--muted); min-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feat-bar-track { flex: 1; height: 4px; background: var(--bg3); border-radius: 2px; }
+.feat-bar-fill { height: 100%; border-radius: 2px; background: var(--accent); }
+.feat-val { font-size: 10px; color: var(--accent); min-width: 32px; text-align: right; }
+
+/* ── Tau confidence ── */
+.tau-display { text-align: center; padding: 12px 0 6px; }
+.tau-main { font-family: var(--display); font-size: 36px; font-weight: 800; color: var(--accent); line-height: 1; }
+.tau-unit { font-size: 13px; color: var(--muted); }
+.tau-range { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.tau-range span { color: var(--text); }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ── Responsive labels on polar ── */
+.main-label { position: absolute; font-family: var(--mono); font-size: 10px; color: var(--muted); pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="logo">Storm<span>Watch</span></div>
+  <div class="ap-selector" id="ap-selector">
+    <button class="ap-btn active" data-ap="Ajaccio">AJA</button>
+    <button class="ap-btn" data-ap="Bastia">BAS</button>
+    <button class="ap-btn" data-ap="Biarritz">BIQ</button>
+    <button class="ap-btn" data-ap="Nantes">NTE</button>
+    <button class="ap-btn" data-ap="Pise">PSA</button>
+    <button class="ap-btn" data-ap="Bron">LYS</button>
+  </div>
+  <div class="topbar-status">
+    <div class="pulse-dot" id="main-pulse"></div>
+    <span id="main-status-text">Surveillance active</span>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<!-- SIDEBAR LEFT -->
+<aside class="sidebar-left">
+
+  <div class="section">
+    <div class="section-title">Statut alerte</div>
+    <div class="alert-badge" id="alert-badge">
+      <div class="badge-dot" id="badge-dot"></div>
+      <div class="badge-text" id="badge-text">—</div>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi accent">
+        <div class="kpi-label">Éclairs CG</div>
+        <div class="kpi-value" id="kpi-ncg">0</div>
+        <div class="kpi-sub">dans l'alerte</div>
+      </div>
+      <div class="kpi warn">
+        <div class="kpi-label">Durée écoulée</div>
+        <div class="kpi-value" id="kpi-dur">0</div>
+        <div class="kpi-sub">minutes</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Dist. min</div>
+        <div class="kpi-value" id="kpi-dmin" style="font-size:18px">—</div>
+        <div class="kpi-sub">km</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Dernier inter-t.</div>
+        <div class="kpi-value" id="kpi-inter" style="font-size:18px">—</div>
+        <div class="kpi-sub">secondes</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Probabilité de fin</div>
+    <div class="gauge-wrap">
+      <svg class="gauge-svg" viewBox="0 0 140 80">
+        <defs>
+          <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%"   stop-color="#22c55e"/>
+            <stop offset="50%"  stop-color="#f59e0b"/>
+            <stop offset="100%" stop-color="#ef4444"/>
+          </linearGradient>
+        </defs>
+        <path d="M10 75 A60 60 0 0 1 130 75" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="12" stroke-linecap="round"/>
+        <path id="gauge-arc" d="M10 75 A60 60 0 0 1 130 75" fill="none" stroke="url(#gaugeGrad)" stroke-width="12" stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="188.5" style="transition:stroke-dashoffset .8s ease"/>
+        <line id="gauge-needle" x1="70" y1="75" x2="70" y2="22" stroke="white" stroke-width="2" stroke-linecap="round" style="transform-origin:70px 75px; transform:rotate(-90deg); transition:transform .8s ease"/>
+        <circle cx="70" cy="75" r="4" fill="white"/>
+      </svg>
+      <div class="gauge-label" id="gauge-pct" style="color:var(--muted)">—</div>
+      <div class="gauge-sublabel">P(dernier éclair)</div>
+    </div>
+  </div>
+
+  <div class="section" style="flex:1">
+    <div class="section-title">Prédiction τ (temps restant)</div>
+    <div class="tau-display">
+      <div class="tau-main" id="tau-main">—</div>
+      <div class="tau-unit">minutes</div>
+      <div class="tau-range">IC 90% : <span id="tau-range">— à — min</span></div>
+    </div>
+    <div style="margin-top:12px">
+      <div class="progress-row">
+        <div class="progress-label"><span>Hawkes</span><span id="p-hawkes">—</span></div>
+        <div class="progress-track"><div class="progress-fill" id="pb-hawkes" style="width:0%;background:var(--accent)"></div></div>
+      </div>
+      <div class="progress-row">
+        <div class="progress-label"><span>XGBoost</span><span id="p-xgb">—</span></div>
+        <div class="progress-track"><div class="progress-fill" id="pb-xgb" style="width:0%;background:var(--accent2)"></div></div>
+      </div>
+      <div class="progress-row">
+        <div class="progress-label"><span>Blend final</span><span id="p-blend">—</span></div>
+        <div class="progress-track"><div class="progress-fill" id="pb-blend" style="width:0%;background:var(--warn)"></div></div>
+      </div>
+    </div>
+  </div>
+
+</aside>
+
+<!-- MAIN — Polar canvas -->
+<main class="main">
+  <canvas id="polar-canvas"></canvas>
+  <div style="position:absolute;top:12px;left:16px;font-family:var(--display);font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase" id="map-title">Vue polaire — Ajaccio</div>
+  <div style="position:absolute;top:12px;right:16px;display:flex;gap:12px;font-size:10px;color:var(--muted);">
+    <span><span style="color:#3b9eff">●</span> CG nuage-sol</span>
+    <span><span style="color:#f59e0b">●</span> IC intra-nuage</span>
+    <span><span style="color:white">●</span> Centroïde</span>
+  </div>
+  <div style="position:absolute;bottom:12px;left:16px;font-size:10px;color:var(--muted)" id="sim-label">Simulation — t=0</div>
+  <div style="position:absolute;bottom:12px;right:16px;display:flex;gap:8px">
+    <button onclick="toggleSim()" id="sim-btn" style="padding:5px 12px;border:1px solid var(--border2);border-radius:4px;background:transparent;color:var(--text);font-family:var(--mono);font-size:11px;cursor:pointer">▶ Simuler</button>
+    <button onclick="resetSim()" style="padding:5px 12px;border:1px solid var(--border2);border-radius:4px;background:transparent;color:var(--muted);font-family:var(--mono);font-size:11px;cursor:pointer">↺ Reset</button>
+  </div>
+</main>
+
+<!-- SIDEBAR RIGHT -->
+<aside class="sidebar-right">
+
+  <div class="section">
+    <div class="section-title">Features clés</div>
+    <div id="features-list"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Importance modèle</div>
+    <div id="feat-importance"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Distribution τ (60 simulations)</div>
+    <canvas id="hist-canvas"></canvas>
+  </div>
+
+  <div class="section" style="flex:1">
+    <div class="section-title">Journal de l'alerte</div>
+    <div class="timeline" id="timeline"></div>
+  </div>
+
+</aside>
+</div>
+
+<script>
+const W = () => document.getElementById('polar-canvas').width;
+const H = () => document.getElementById('polar-canvas').height;
+
+// ── Aéroports ────────────────────────────────────────────────────────────────
+const AIRPORTS = {
+  Ajaccio:  {code:'AJA', lat:41.9236, lon:8.8029},
+  Bastia:   {code:'BAS', lat:42.5527, lon:9.4837},
+  Biarritz: {code:'BIQ', lat:43.4683, lon:-1.524},
+  Nantes:   {code:'NTE', lat:47.1532, lon:-1.6107},
+  Pise:     {code:'PSA', lat:43.695,  lon:10.399},
+  Bron:     {code:'LYS', lat:45.7294, lon:4.9389},
+};
+
+// ── État global ──────────────────────────────────────────────────────────────
+let currentAP = 'Ajaccio';
+let simRunning = false;
+let simTimer = null;
+let simStep = 0;
+let alertData = null;
+
+// ── Génération données simulées réalistes ─────────────────────────────────────
+function generateAlert(ap) {
+  const rng = (a,b) => a + Math.random()*(b-a);
+  const n = Math.floor(rng(8, 35));
+  const strikes = [];
+  let t = 0;
+  let dist = rng(18, 28);
+  let az = rng(20, 340);
+  const trend = Math.random() > 0.5 ? -0.4 : 0.3;
+
+  for (let i = 0; i < n; i++) {
+    const dt = Math.exp(rng(0.5, 3.5));
+    t += dt;
+    dist = Math.max(2, Math.min(30, dist + trend*rng(0.2,1.2) + rng(-2,2)));
+    az = (az + rng(-25, 25) + 360) % 360;
+    const amp = rng(-120, -5) * (Math.random() > 0.15 ? 1 : -1);
+    const icloud = Math.random() < 0.25;
+    strikes.push({ t, dist, az, amp, icloud,
+      x: dist * Math.sin(az*Math.PI/180),
+      y: dist * Math.cos(az*Math.PI/180),
+    });
+  }
+
+  // Probabilités simulées (croissantes vers la fin)
+  const probas = strikes.map((s,i) => {
+    const prog = i / (n-1);
+    return Math.min(0.97, 0.05 + prog*prog*0.85 + rng(-0.05, 0.05));
+  });
+
+  const tau_hawkes = strikes.map((s,i) => {
+    const rem = (strikes[n-1].t - s.t) * rng(0.85, 1.25);
+    return Math.max(0, rem);
+  });
+  const tau_xgb = tau_hawkes.map(v => Math.max(0, v*rng(0.7,1.3)));
+  const tau_blend = tau_hawkes.map((h,i) => 0.4*h + 0.6*tau_xgb[i]);
+  const tau_q05 = tau_blend.map(v => v*0.4);
+  const tau_q95 = tau_blend.map(v => v*1.8);
+
+  return { ap, n, strikes, probas, tau_hawkes, tau_xgb, tau_blend, tau_q05, tau_q95 };
+}
+
+// ── Polar canvas ──────────────────────────────────────────────────────────────
+function resizeCanvas() {
+  const c = document.getElementById('polar-canvas');
+  const rect = c.parentElement.getBoundingClientRect();
+  c.width  = rect.width;
+  c.height = rect.height;
+}
+
+function drawPolar(step) {
+  const c = document.getElementById('polar-canvas');
+  const ctx = c.getContext('2d');
+  const cw = c.width, ch = c.height;
+  const cx = cw/2, cy = ch/2 + 20;
+  const maxDist = 32;
+  const scale = Math.min(cw, ch) * 0.42 / maxDist;
+
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.fillStyle = '#080c14';
+  ctx.fillRect(0, 0, cw, ch);
+
+  // Grilles radiales
+  [10, 20, 30].forEach(r => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r*scale, 0, 2*Math.PI);
+    ctx.strokeStyle = r===20 ? 'rgba(239,68,68,0.25)' : 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = r===20 ? 1.5 : 0.5;
+    ctx.setLineDash(r===20 ? [4,4] : []);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.font = '10px JetBrains Mono';
+    ctx.fillText(r+'km', cx+r*scale+4, cy-4);
+  });
+
+  // Lignes cardinales
+  ['N','E','S','O'].forEach((d,i) => {
+    const a = i*Math.PI/2 - Math.PI/2;
+    const r = 31*scale;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + r*Math.cos(a), cy + r*Math.sin(a));
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '11px Syne';
+    ctx.textAlign = 'center';
+    ctx.fillText(d, cx + (r+14)*Math.cos(a), cy + (r+14)*Math.sin(a)+4);
+  });
+  ctx.textAlign = 'left';
+
+  if (!alertData) return;
+  const { strikes, probas } = alertData;
+  const visible = strikes.slice(0, step+1);
+
+  // Tracer la trajectoire du centroïde
+  if (visible.length >= 3) {
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3,5]);
+    for (let i = 0; i < visible.length; i++) {
+      const last10 = visible.slice(Math.max(0,i-9), i+1).filter(s=>!s.icloud);
+      if (last10.length < 2) continue;
+      const mx = last10.reduce((a,s)=>a+s.x,0)/last10.length;
+      const my = last10.reduce((a,s)=>a+s.y,0)/last10.length;
+      const px = cx + mx*scale, py = cy - my*scale;
+      if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Éclairs historiques (translucides)
+  visible.forEach((s, i) => {
+    if (i === step) return;
+    const age = step - i;
+    const opacity = Math.max(0.05, 0.4 - age*0.03);
+    const px = cx + s.x*scale, py = cy - s.y*scale;
+    const r = Math.min(6, Math.max(2, Math.abs(s.amp)/25));
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, 2*Math.PI);
+    ctx.fillStyle = s.icloud
+      ? `rgba(245,158,11,${opacity})`
+      : `rgba(59,158,255,${opacity})`;
+    ctx.fill();
+  });
+
+  // Éclair courant
+  if (step < strikes.length) {
+    const s = strikes[step];
+    const px = cx + s.x*scale, py = cy - s.y*scale;
+    const r = Math.min(10, Math.max(4, Math.abs(s.amp)/18));
+    // Halo
+    ctx.beginPath();
+    ctx.arc(px, py, r+6, 0, 2*Math.PI);
+    ctx.fillStyle = s.icloud ? 'rgba(245,158,11,0.15)' : 'rgba(59,158,255,0.15)';
+    ctx.fill();
+    // Point
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, 2*Math.PI);
+    ctx.fillStyle = s.icloud ? '#f59e0b' : '#3b9eff';
+    ctx.fill();
+    // Croix de visée
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(px-12,py); ctx.lineTo(px+12,py);
+    ctx.moveTo(px,py-12); ctx.lineTo(px,py+12);
+    ctx.stroke();
+  }
+
+  // Centroïde des 10 derniers CG
+  const last10cg = visible.filter(s=>!s.icloud).slice(-10);
+  if (last10cg.length >= 2) {
+    const mx = last10cg.reduce((a,s)=>a+s.x,0)/last10cg.length;
+    const my = last10cg.reduce((a,s)=>a+s.y,0)/last10cg.length;
+    const px = cx + mx*scale, py = cy - my*scale;
+    ctx.beginPath();
+    ctx.arc(px, py, 8, 0, 2*Math.PI);
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(px, py, 3, 0, 2*Math.PI);
+    ctx.fillStyle = 'white';
+    ctx.fill();
+  }
+
+  // Aéroport au centre
+  ctx.beginPath();
+  ctx.arc(cx, cy, 6, 0, 2*Math.PI);
+  ctx.fillStyle = 'rgba(239,68,68,0.8)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx, cy, 10, 0, 2*Math.PI);
+  ctx.strokeStyle = 'rgba(239,68,68,0.3)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = 'bold 9px JetBrains Mono';
+  ctx.textAlign = 'center';
+  ctx.fillText(AIRPORTS[currentAP]?.code || 'AP', cx, cy+20);
+  ctx.textAlign = 'left';
+}
+
+// ── Histogramme τ ─────────────────────────────────────────────────────────────
+function drawHist(tauBlend) {
+  const c = document.getElementById('hist-canvas');
+  const ctx = c.getContext('2d');
+  const cw = c.width = c.offsetWidth * devicePixelRatio;
+  const ch = c.height = 80 * devicePixelRatio;
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  const W = c.offsetWidth, H = 80;
+  ctx.clearRect(0, 0, W, H);
+
+  // Distribution artificielle autour de tauBlend
+  const bins = 20;
+  const sigma = tauBlend * 0.3 + 2;
+  const counts = new Array(bins).fill(0);
+  const maxT = tauBlend * 2.5 + 10;
+  for (let i = 0; i < 200; i++) {
+    const v = tauBlend + (Math.random()+Math.random()+Math.random()-1.5)*sigma;
+    const bin = Math.floor(v / maxT * bins);
+    if (bin >= 0 && bin < bins) counts[bin]++;
+  }
+  const maxC = Math.max(...counts);
+  const bw = (W-20) / bins;
+
+  counts.forEach((c, i) => {
+    const bh = (c/maxC) * (H-20);
+    const x = 10 + i*bw;
+    const y = H - bh - 10;
+    ctx.fillStyle = i === Math.floor(tauBlend/maxT*bins)
+      ? 'rgba(245,158,11,0.8)'
+      : 'rgba(59,158,255,0.35)';
+    ctx.fillRect(x, y, bw-2, bh);
+  });
+
+  // Ligne médiane
+  const mx = 10 + (tauBlend/maxT) * (W-20);
+  ctx.beginPath();
+  ctx.moveTo(mx, 0); ctx.lineTo(mx, H-10);
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([3,3]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// ── Update UI ─────────────────────────────────────────────────────────────────
+function updateUI(step) {
+  if (!alertData) return;
+  const { strikes, probas, tau_hawkes, tau_xgb, tau_blend, tau_q05, tau_q95 } = alertData;
+  const s = strikes[step];
+  const prob = probas[step];
+  const tau  = tau_blend[step];
+  const tH   = tau_hawkes[step];
+  const tX   = tau_xgb[step];
+  const q05  = tau_q05[step];
+  const q95  = tau_q95[step];
+  const prev = step > 0 ? strikes[step-1] : null;
+  const inter = prev ? ((s.t - prev.t)*60).toFixed(0) : '—';
+  const dur   = (s.t).toFixed(1);
+  const cg_count = strikes.slice(0,step+1).filter(x=>!x.icloud).length;
+  const dmin  = Math.min(...strikes.slice(0,step+1).map(x=>x.dist)).toFixed(1);
+
+  document.getElementById('kpi-ncg').textContent  = cg_count;
+  document.getElementById('kpi-dur').textContent  = dur;
+  document.getElementById('kpi-dmin').textContent = dmin;
+  document.getElementById('kpi-inter').textContent = inter;
+
+  // Gauge
+  const arc = document.getElementById('gauge-arc');
+  const needle = document.getElementById('gauge-needle');
+  const dashLen = 188.5;
+  arc.setAttribute('stroke-dashoffset', dashLen * (1-prob));
+  needle.style.transform = `rotate(${-90 + prob*180}deg)`;
+  const gPct = document.getElementById('gauge-pct');
+  gPct.textContent = (prob*100).toFixed(0) + '%';
+  gPct.style.color = prob > 0.7 ? 'var(--safe)' : prob > 0.4 ? 'var(--warn)' : 'var(--danger)';
+
+  // Tau
+  document.getElementById('tau-main').textContent = tau.toFixed(1);
+  document.getElementById('tau-range').innerHTML =
+    `<span>${q05.toFixed(1)}</span> à <span>${q95.toFixed(1)}</span> min`;
+
+  const maxTau = tau_blend[0] || 30;
+  document.getElementById('p-hawkes').textContent = tH.toFixed(1)+' min';
+  document.getElementById('p-xgb').textContent    = tX.toFixed(1)+' min';
+  document.getElementById('p-blend').textContent  = tau.toFixed(1)+' min';
+  document.getElementById('pb-hawkes').style.width = Math.min(100,(1-tH/maxTau)*100)+'%';
+  document.getElementById('pb-xgb').style.width    = Math.min(100,(1-tX/maxTau)*100)+'%';
+  document.getElementById('pb-blend').style.width  = Math.min(100,(1-tau/maxTau)*100)+'%';
+
+  // Badge
+  const badge = document.getElementById('alert-badge');
+  const dot   = document.getElementById('badge-dot');
+  const txt   = document.getElementById('badge-text');
+  const mp    = document.getElementById('main-pulse');
+  const mst   = document.getElementById('main-status-text');
+  badge.className = 'alert-badge';
+  if (prob > 0.65) {
+    badge.classList.add('green'); dot.className='badge-dot green';
+    txt.textContent = 'Fin imminente détectée';
+    mp.className='pulse-dot'; mst.textContent='Fin probable';
+  } else if (prob > 0.35) {
+    badge.classList.add('orange'); dot.className='badge-dot orange';
+    txt.textContent = 'Orage en phase de sortie';
+    mp.className='pulse-dot warn'; mst.textContent='Surveillance renforcée';
+  } else {
+    badge.classList.add('red'); dot.className='badge-dot red';
+    txt.textContent = 'Orage actif — Zone interdite';
+    mp.className='pulse-dot danger'; mst.textContent='Alerte active';
+  }
+
+  // Features
+  const feats = [
+    {name:'inter_time_s',  val:(s.t-(prev?.t||0)).toFixed(1)+'s'},
+    {name:'dist (km)',     val:s.dist.toFixed(1)},
+    {name:'amplitude',     val:s.amp.toFixed(1)+' kA'},
+    {name:'n_cg_cumul',    val:cg_count},
+    {name:'centroid_dist', val:(Math.sqrt(s.x**2+s.y**2)).toFixed(1)+' km'},
+    {name:'p_fin_30min',   val:(prob*100).toFixed(0)+'%'},
+  ];
+  document.getElementById('features-list').innerHTML = feats.map(f=>
+    `<div class="feat-row" style="margin-bottom:8px">
+      <div style="font-size:10px;color:var(--muted);min-width:100px">${f.name}</div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--text);margin-left:auto">${f.val}</div>
+    </div>`
+  ).join('');
+
+  // Feature importance
+  const importances = [
+    {name:'ratio_max',        v:0.142},
+    {name:'inter_trend',      v:0.118},
+    {name:'centroid_approach',v:0.097},
+    {name:'tau_pred_hawkes',  v:0.089},
+    {name:'z_score_inter',    v:0.074},
+    {name:'dist_trend',       v:0.068},
+    {name:'n_cg_5m',          v:0.061},
+    {name:'centroid_speed',   v:0.054},
+  ];
+  document.getElementById('feat-importance').innerHTML = importances.map(f=>
+    `<div class="feat-row">
+      <div class="feat-name">${f.name}</div>
+      <div class="feat-bar-track"><div class="feat-bar-fill" style="width:${(f.v/0.142*100).toFixed(0)}%"></div></div>
+      <div class="feat-val">${(f.v*100).toFixed(1)}%</div>
+    </div>`
+  ).join('');
+
+  // Histogramme
+  drawHist(tau);
+
+  // Sim label
+  document.getElementById('sim-label').textContent =
+    `t = +${s.t.toFixed(1)} min | éclair ${step+1}/${strikes.length}`;
+
+  // Timeline (dernier en haut)
+  const tlEl = document.getElementById('timeline');
+  const tlItems = tlEl.querySelectorAll('.tl-item');
+  if (tlItems.length === 0 || parseInt(tlEl.dataset.lastStep||'-1') !== step) {
+    const now = new Date();
+    const hhmm = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+    const dot_color = s.icloud ? '#f59e0b' : '#3b9eff';
+    const msg = s.icloud
+      ? `Éclair IC — az ${s.az.toFixed(0)}° dist ${s.dist.toFixed(1)} km`
+      : `Éclair CG — ${s.amp.toFixed(0)} kA  dist ${s.dist.toFixed(1)} km`;
+    const newItem = document.createElement('div');
+    newItem.className = 'tl-item';
+    newItem.innerHTML = `
+      <div class="tl-time">${hhmm}</div>
+      <div class="tl-dot-col"><div class="tl-dot" style="background:${dot_color}"></div></div>
+      <div class="tl-content"><div class="tl-msg">${msg}</div>
+      <div class="tl-meta">P(fin)=${(prob*100).toFixed(0)}%  τ=${tau.toFixed(1)}min</div></div>`;
+    tlEl.insertBefore(newItem, tlEl.firstChild);
+    tlEl.dataset.lastStep = step;
+    while (tlEl.children.length > 20) tlEl.removeChild(tlEl.lastChild);
+  }
+}
+
+// ── Simulation ────────────────────────────────────────────────────────────────
+function startSim() {
+  if (!alertData) alertData = generateAlert(currentAP);
+  simTimer = setInterval(() => {
+    simStep = Math.min(simStep+1, alertData.strikes.length-1);
+    drawPolar(simStep);
+    updateUI(simStep);
+    if (simStep >= alertData.strikes.length-1) {
+      stopSim();
+      document.getElementById('sim-btn').textContent = '▶ Rejouer';
+    }
+  }, 700);
+  document.getElementById('sim-btn').textContent = '⏸ Pause';
+}
+
+function stopSim() {
+  clearInterval(simTimer);
+  simRunning = false;
+}
+
+function toggleSim() {
+  if (simRunning) {
+    stopSim();
+    document.getElementById('sim-btn').textContent = '▶ Reprendre';
+  } else {
+    simRunning = true;
+    if (simStep >= (alertData?.strikes.length||1)-1) { simStep=0; document.getElementById('timeline').innerHTML=''; }
+    startSim();
+  }
+}
+
+function resetSim() {
+  stopSim();
+  simStep = 0;
+  alertData = generateAlert(currentAP);
+  document.getElementById('timeline').innerHTML = '';
+  document.getElementById('sim-btn').textContent = '▶ Simuler';
+  drawPolar(0);
+  updateUI(0);
+}
+
+// ── Airport switch ─────────────────────────────────────────────────────────────
+document.getElementById('ap-selector').addEventListener('click', e => {
+  const btn = e.target.closest('.ap-btn');
+  if (!btn) return;
+  document.querySelectorAll('.ap-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  currentAP = btn.dataset.ap;
+  document.getElementById('map-title').textContent = `Vue polaire — ${currentAP}`;
+  resetSim();
+});
+
+// ── Horloge ───────────────────────────────────────────────────────────────────
+function updateClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    n.getHours().toString().padStart(2,'0')+':'+
+    n.getMinutes().toString().padStart(2,'0')+':'+
+    n.getSeconds().toString().padStart(2,'0')+' UTC';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.addEventListener('resize', () => { resizeCanvas(); drawPolar(simStep); });
+resizeCanvas();
+alertData = generateAlert(currentAP);
+drawPolar(0);
+updateUI(0);
+</script>
+</body>
+</html>
