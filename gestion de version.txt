@@ -1,3 +1,0 @@
-pip install nbdime
-python -m nbdime diff-web analyse.ipynb analyseLOIC.ipynb
-python -m nbdime merge-web analyse.ipynb analyseLOIC.ipynb analyse0.ipynb

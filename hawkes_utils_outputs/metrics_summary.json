@@ -1,0 +1,51 @@
+{
+  "regression_test": {
+    "MAE": {
+      "Hawkes": 55.295,
+      "XGBoost": 33.319,
+      "Blend final": 33.319
+    },
+    "RMSE": {
+      "Hawkes": 83.972,
+      "XGBoost": 49.181,
+      "Blend final": 49.181
+    },
+    "Bias": {
+      "Hawkes": -16.218,
+      "XGBoost": -3.716,
+      "Blend final": -3.716
+    },
+    "Corr": {
+      "Hawkes": 0.034,
+      "XGBoost": 0.826,
+      "Blend final": 0.826
+    }
+  },
+  "classification_test": {
+    "Mod\u00e8le": "XGB calibr\u00e9",
+    "Brier \u2193": 0.0,
+    "AUC-ROC \u2191": 1.0,
+    "Log-loss \u2193": 0.0,
+    "AP \u2191": 1.0
+  },
+  "hawkes_params": {
+    "mu": 0.1,
+    "alpha": 0.2228662357189435,
+    "beta": 0.25121525201441713,
+    "delta": 0.05,
+    "gamma": 0.03,
+    "n_sim": 60,
+    "max_time_min": 180,
+    "intensity_threshold": 5e-05
+  },
+  "blend_weights": {
+    "hawkes": 0.0,
+    "xgb": 1.0
+  },
+  "n_features": 81,
+  "split": {
+    "train_years": "\u22642022",
+    "val_year": 2023,
+    "test_years": "\u22652024"
+  }
+}

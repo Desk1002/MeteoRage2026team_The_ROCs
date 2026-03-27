@@ -1,0 +1,6 @@
+airport,n_events,n_alertes,MAE_tau,RMSE_tau,AUC_last
+Ajaccio,2021,133,20.53,27.16,1.0
+Bastia,4724,130,42.97,63.59,1.0
+Biarritz,2207,141,15.89,27.32,1.0
+Nantes,1700,59,36.22,44.78,1.0
+Pise,4438,135,36.43,49.45,1.0
