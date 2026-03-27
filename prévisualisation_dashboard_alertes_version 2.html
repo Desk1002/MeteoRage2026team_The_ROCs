@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ATC Storm Monitor — Tableau de bord opérationnel</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg:       #0a0c10;
+    --bg2:      #10141c;
+    --bg3:      #161b26;
+    --border:   #1e2738;
+    --text:     #c8d4e8;
+    --muted:    #5a6a88;
+    --green:    #00e5a0;
+    --amber:    #f5a623;
+    --red:      #ff4d6d;
+    --blue:     #4da8ff;
+    --purple:   #9b7fe8;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-head: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    min-height: 100vh;
+    font-size: 13px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+  }
+  .logo {
+    font-family: var(--font-head);
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+    color: #fff;
+  }
+  .logo span { color: var(--blue); }
+  .clock {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  #utc-clock {
+    color: var(--green);
+    font-weight: 700;
+  }
+
+  /* ── LAYOUT ── */
+  .main {
+    display: grid;
+    grid-template-columns: 280px 1fr 280px;
+    grid-template-rows: auto 1fr;
+    gap: 0;
+    height: calc(100vh - 53px);
+  }
+
+  /* ── PANEL GÉNÉRIQUE ── */
+  .panel {
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 16px;
+  }
+  .panel:last-child { border-right: none; border-left: 1px solid var(--border); }
+  .panel-title {
+    font-family: var(--font-head);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  /* ── AIRPORT LIST ── */
+  .airport-card {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    position: relative;
+  }
+  .airport-card:hover  { border-color: var(--blue); background: rgba(77,168,255,.04); }
+  .airport-card.active { border-color: var(--blue); background: rgba(77,168,255,.08); }
+
+  .airport-name {
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 14px;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+  .airport-meta { color: var(--muted); font-size: 11px; }
+
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block; margin-right: 6px;
+  }
+  .status-dot.active  { background: var(--red);   box-shadow: 0 0 8px var(--red); animation: pulse 1.4s ease-in-out infinite; }
+  .status-dot.warning { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  .status-dot.clear   { background: var(--green); }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: .6; transform: scale(1.3); }
+  }
+
+  /* ── CENTRE ── */
+  .center-panel {
+    padding: 20px 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ── PREDICTION CARD (GRANDE) ── */
+  .pred-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+  }
+  .pred-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+  }
+  .airport-big {
+    font-family: var(--font-head);
+    font-size: 26px;
+    font-weight: 800;
+    color: #fff;
+  }
+  .status-badge {
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .status-badge.active  { background: rgba(255,77,109,.15); color: var(--red);   border: 1px solid rgba(255,77,109,.35); }
+  .status-badge.warning { background: rgba(245,166,35,.12); color: var(--amber); border: 1px solid rgba(245,166,35,.3); }
+  .status-badge.clear   { background: rgba(0,229,160,.1);   color: var(--green); border: 1px solid rgba(0,229,160,.25); }
+
+  /* ── TAU DISPLAY ── */
+  .tau-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .tau-box {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .tau-label {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .tau-value {
+    font-family: var(--font-head);
+    font-size: 28px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1;
+  }
+  .tau-unit { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+  .tau-sub  { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ── IC BAR ── */
+  .ic-section { margin-bottom: 20px; }
+  .ic-label {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .ic-label span { color: var(--blue); font-size: 11px; }
+  .ic-track {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    position: relative;
+    margin-bottom: 6px;
+  }
+  .ic-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, rgba(77,168,255,.35), rgba(77,168,255,.7));
+    position: absolute;
+    transition: left .5s, width .5s;
+  }
+  .ic-marker {
+    width: 3px; height: 16px;
+    background: #fff;
+    border-radius: 2px;
+    position: absolute;
+    top: -5px;
+    transform: translateX(-50%);
+    transition: left .5s;
+  }
+  .ic-ticks {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  /* ── PROBA BAR ── */
+  .proba-section { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .proba-box {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .proba-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .proba-bar-track {
+    height: 5px;
+    background: var(--border);
+    border-radius: 3px;
+    margin-bottom: 6px;
+    overflow: hidden;
+  }
+  .proba-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width .5s;
+  }
+  .proba-value { font-size: 20px; font-weight: 700; font-family: var(--font-head); }
+
+  /* ── CONFIDENCE ── */
+  .conf-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .conf-label { font-size: 11px; color: var(--muted); }
+  .conf-bar-track {
+    flex: 1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .conf-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width .5s;
+  }
+  .conf-value { font-size: 12px; font-weight: 700; min-width: 32px; text-align: right; }
+
+  /* ── TIMELINE SVG ── */
+  .timeline-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 22px;
+  }
+  .timeline-title {
+    font-family: var(--font-head);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  #timeline-svg { width: 100%; }
+
+  /* ── PANEL DROITE : DÉTAILS ── */
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-key { color: var(--muted); }
+  .metric-val { font-weight: 700; color: #fff; }
+
+  .alert-log {
+    margin-top: 16px;
+  }
+  .log-entry {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(30,39,56,.6);
+    display: flex;
+    gap: 8px;
+  }
+  .log-time { color: var(--blue); white-space: nowrap; }
+  .log-msg  { flex: 1; }
+
+  /* ── PHASE INDICATOR ── */
+  .phase-indicator {
+    display: flex;
+    gap: 4px;
+    margin-top: 12px;
+  }
+  .phase-step {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    transition: background .4s;
+  }
+  .phase-step.done    { background: var(--blue); }
+  .phase-step.current { background: var(--amber); }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">ATC <span>Storm</span> Monitor</div>
+  <div class="clock">UTC <span id="utc-clock">--:--:--</span> &nbsp;|&nbsp; Prédictions temps réel</div>
+</header>
+
+<div class="main">
+
+  <!-- ══ PANNEAU GAUCHE : liste aéroports ══ -->
+  <div class="panel" id="airport-list">
+    <div class="panel-title">Aéroports</div>
+    <!-- Injecté par JS -->
+  </div>
+
+  <!-- ══ PANNEAU CENTRE : prédiction détaillée ══ -->
+  <div class="center-panel" id="center">
+
+    <div class="pred-card" id="pred-card">
+      <div class="pred-card-header">
+        <div>
+          <div class="airport-big" id="ap-name">—</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px" id="ap-meta"></div>
+        </div>
+        <div class="status-badge" id="status-badge">—</div>
+      </div>
+
+      <!-- TAU -->
+      <div class="tau-section">
+        <div class="tau-box">
+          <div class="tau-label">Temps restant estimé</div>
+          <div class="tau-value" id="tau-pred">—<span class="tau-unit">min</span></div>
+          <div class="tau-sub" id="tau-sub">—</div>
+        </div>
+        <div class="tau-box">
+          <div class="tau-label">IC 80%</div>
+          <div class="tau-value" id="ic-range" style="font-size:18px">—</div>
+          <div class="tau-sub">Intervalle de confiance</div>
+        </div>
+        <div class="tau-box">
+          <div class="tau-label">Largeur IC</div>
+          <div class="tau-value" id="ic-width">—<span class="tau-unit">min</span></div>
+          <div class="tau-sub" id="conf-text">Confiance —</div>
+        </div>
+      </div>
+
+      <!-- IC BAR -->
+      <div class="ic-section">
+        <div class="ic-label">
+          Intervalle de confiance 80% (min)
+          <span id="ic-label-right">—</span>
+        </div>
+        <div class="ic-track" id="ic-track">
+          <div class="ic-fill" id="ic-fill"></div>
+          <div class="ic-marker" id="ic-marker"></div>
+        </div>
+        <div class="ic-ticks">
+          <span>0</span><span>30</span><span>60</span><span>90</span><span>120</span><span>≥150</span>
+        </div>
+      </div>
+
+      <!-- PROBAS -->
+      <div class="proba-section">
+        <div class="proba-box">
+          <div class="proba-label">P(fin &lt; 30 min)</div>
+          <div class="proba-bar-track">
+            <div class="proba-bar-fill" id="p30-fill" style="width:0%"></div>
+          </div>
+          <div class="proba-value" id="p30-val">—</div>
+        </div>
+        <div class="proba-box">
+          <div class="proba-label">P(fin &lt; 60 min)</div>
+          <div class="proba-bar-track">
+            <div class="proba-bar-fill" id="p60-fill" style="width:0%"></div>
+          </div>
+          <div class="proba-value" id="p60-val">—</div>
+        </div>
+      </div>
+
+      <!-- CONFIDENCE -->
+      <div class="conf-section">
+        <div class="conf-label">Indice de confiance</div>
+        <div class="conf-bar-track">
+          <div class="conf-bar-fill" id="conf-fill"></div>
+        </div>
+        <div class="conf-value" id="conf-val">—</div>
+      </div>
+    </div>
+
+    <!-- TIMELINE -->
+    <div class="timeline-card">
+      <div class="timeline-title">Séquence des éclairs — alerte en cours</div>
+      <svg id="timeline-svg" height="90" viewBox="0 0 700 90"></svg>
+    </div>
+
+    <!-- PHASE -->
+    <div class="timeline-card" style="padding:14px 22px">
+      <div class="timeline-title">Phase de l'alerte</div>
+      <div class="phase-indicator" id="phase-indicator"></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:6px">
+        <span>Début</span><span>Montée</span><span>Pic</span><span>Déclin</span><span>Fin</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══ PANNEAU DROITE : métriques & log ══ -->
+  <div class="panel" id="right-panel">
+    <div class="panel-title">Métriques détaillées</div>
+    <div id="metrics-list"></div>
+    <div class="panel-title" style="margin-top:18px">Journal d'événements</div>
+    <div class="alert-log" id="alert-log"></div>
+  </div>
+
+</div>
+
+<script>
+// ─── DONNÉES DE DÉMONSTRATION ───────────────────────────────────────
+// En production : charger depuis predictions_v2.csv via API
+const AIRPORTS = [
+  {
+    id: "CDG",
+    name: "Paris CDG",
+    icao: "LFPG",
+    status: "active",
+    n_events: 34,
+    n_alerts: 2,
+    tau_pred: 28,
+    ic_lower: 12,
+    ic_upper: 54,
+    p30: 0.61,
+    p60: 0.88,
+    confidence: 0.72,
+    progress: 0.58,
+    hawkes_pred: 35,
+    xgb_pred: 23,
+    adaptive_w: 0.42,
+    tau_cv: 0.48,
+    events_t: [0,3,4,6,7,9,11,14,17,19,22,24,26,28,30,32,34,36,37,38],
+    events_ic:[0,0,1,0,0,1,1,0,0,1,0,0,1,0,0,1,0,0,0,1],
+  },
+  {
+    id: "NCE",
+    name: "Nice Côte d'Azur",
+    icao: "LFMN",
+    status: "warning",
+    n_events: 18,
+    n_alerts: 1,
+    tau_pred: 47,
+    ic_lower: 22,
+    ic_upper: 88,
+    p30: 0.29,
+    p60: 0.68,
+    confidence: 0.58,
+    progress: 0.35,
+    hawkes_pred: 55,
+    xgb_pred: 40,
+    adaptive_w: 0.61,
+    tau_cv: 0.72,
+    events_t: [0,5,8,12,15,20,24,28,33,37,40,43,45,47,50,52,54,57],
+    events_ic:[0,0,0,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0],
+  },
+  {
+    id: "LYS",
+    name: "Lyon Saint-Exupéry",
+    icao: "LFLL",
+    status: "clear",
+    n_events: 52,
+    n_alerts: 3,
+    tau_pred: 5,
+    ic_lower: 1,
+    ic_upper: 14,
+    p30: 0.93,
+    p60: 0.98,
+    confidence: 0.89,
+    progress: 0.91,
+    hawkes_pred: 6,
+    xgb_pred: 4,
+    adaptive_w: 0.18,
+    tau_cv: 0.22,
+    events_t: [0,1,2,3,4,5,6,7,9,11,13,16,19,22,25,28,32,36,40,44,47,49,51,52],
+    events_ic:[1,0,1,1,0,1,1,1,0,0,1,0,0,1,0,0,0,1,0,0,0,0,1,0],
+  },
+  {
+    id: "MRS",
+    name: "Marseille Provence",
+    icao: "LFML",
+    status: "active",
+    n_events: 8,
+    n_alerts: 1,
+    tau_pred: 72,
+    ic_lower: 35,
+    ic_upper: 130,
+    p30: 0.12,
+    p60: 0.41,
+    confidence: 0.41,
+    progress: 0.14,
+    hawkes_pred: 85,
+    xgb_pred: 64,
+    adaptive_w: 0.74,
+    tau_cv: 1.15,
+    events_t: [0,8,15,22,28,34,40,48],
+    events_ic:[0,0,0,1,0,0,0,1],
+  },
+];
+
+let selectedId = AIRPORTS[0].id;
+
+// ─── HORLOGE UTC ────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('utc-clock').textContent =
+    now.toUTCString().split(' ')[4];
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ─── LISTE AÉROPORTS ────────────────────────────────────────
+function renderAirportList() {
+  const container = document.getElementById('airport-list');
+  container.innerHTML = '<div class="panel-title">Aéroports</div>';
+  AIRPORTS.forEach(ap => {
+    const card = document.createElement('div');
+    card.className = 'airport-card' + (ap.id === selectedId ? ' active' : '');
+    card.innerHTML = `
+      <div class="airport-name">
+        <span class="status-dot ${ap.status}"></span>${ap.name}
+      </div>
+      <div class="airport-meta">
+        ${ap.icao} · ${ap.n_events} éclairs · Alerte ${ap.id === 'LYS' ? 'se termine' : 'en cours'}
+      </div>
+      <div style="margin-top:6px;font-size:11px">
+        <span style="color:${ap.status==='active'?'var(--red)':ap.status==='warning'?'var(--amber)':'var(--green)'}">
+          τ̂ = ${ap.tau_pred} min
+        </span>
+        <span style="color:var(--muted);margin-left:10px">
+          P(&lt;30min) = ${Math.round(ap.p30*100)}%
+        </span>
+      </div>
+    `;
+    card.onclick = () => { selectedId = ap.id; renderAll(); };
+    container.appendChild(card);
+  });
+}
+
+// ─── PANNEAU CENTRE ─────────────────────────────────────────
+function renderCenter(ap) {
+  document.getElementById('ap-name').textContent = ap.name;
+  document.getElementById('ap-meta').textContent =
+    `${ap.icao} · ${ap.n_events} éclairs · ${ap.n_alerts} alerte(s)`;
+
+  // Status badge
+  const badge = document.getElementById('status-badge');
+  const labels = { active: 'ALERTE ACTIVE', warning: 'FIN PROCHE', clear: 'DÉGAGEMENT' };
+  badge.textContent  = labels[ap.status];
+  badge.className    = `status-badge ${ap.status}`;
+
+  // TAU boxes
+  document.getElementById('tau-pred').innerHTML =
+    `${ap.tau_pred}<span class="tau-unit">min</span>`;
+  document.getElementById('tau-sub').textContent =
+    `Hawkes: ${ap.hawkes_pred}min · XGB: ${ap.xgb_pred}min (w=${ap.adaptive_w.toFixed(2)})`;
+  document.getElementById('ic-range').textContent =
+    `[${ap.ic_lower} – ${ap.ic_upper}]`;
+  const icWidth = ap.ic_upper - ap.ic_lower;
+  document.getElementById('ic-width').innerHTML =
+    `${icWidth}<span class="tau-unit">min</span>`;
+  document.getElementById('conf-text').textContent =
+    `Confiance ${Math.round(ap.confidence * 100)}%`;
+
+  // IC label
+  document.getElementById('ic-label-right').textContent =
+    `${ap.ic_lower} – ${ap.ic_upper} min`;
+
+  // IC bar (échelle 0-150 min)
+  const scale = 150;
+  const leftPct   = Math.min(ap.ic_lower / scale * 100, 95);
+  const widthPct  = Math.min((ap.ic_upper - ap.ic_lower) / scale * 100, 100 - leftPct);
+  const markerPct = Math.min(ap.tau_pred / scale * 100, 99);
+  document.getElementById('ic-fill').style.left  = leftPct + '%';
+  document.getElementById('ic-fill').style.width = widthPct + '%';
+  document.getElementById('ic-marker').style.left = markerPct + '%';
+
+  // Proba bars
+  const p30Color = ap.p30 > 0.7 ? 'var(--green)' : ap.p30 > 0.4 ? 'var(--amber)' : 'var(--red)';
+  const p60Color = ap.p60 > 0.7 ? 'var(--green)' : ap.p60 > 0.4 ? 'var(--amber)' : 'var(--red)';
+  document.getElementById('p30-fill').style.cssText = `width:${ap.p30*100}%;background:${p30Color}`;
+  document.getElementById('p60-fill').style.cssText = `width:${ap.p60*100}%;background:${p60Color}`;
+  document.getElementById('p30-val').style.color = p30Color;
+  document.getElementById('p60-val').style.color = p60Color;
+  document.getElementById('p30-val').textContent = Math.round(ap.p30*100) + '%';
+  document.getElementById('p60-val').textContent = Math.round(ap.p60*100) + '%';
+
+  // Confidence
+  const confColor = ap.confidence > 0.7 ? 'var(--green)' : ap.confidence > 0.45 ? 'var(--amber)' : 'var(--red)';
+  document.getElementById('conf-fill').style.cssText = `width:${ap.confidence*100}%;background:${confColor}`;
+  document.getElementById('conf-val').style.color = confColor;
+  document.getElementById('conf-val').textContent = Math.round(ap.confidence*100) + '%';
+
+  // Phase
+  renderPhase(ap.progress);
+
+  // Timeline
+  renderTimeline(ap);
+}
+
+function renderPhase(progress) {
+  const pi = document.getElementById('phase-indicator');
+  pi.innerHTML = '';
+  const N = 20;
+  const current = Math.round(progress * (N - 1));
+  for (let i = 0; i < N; i++) {
+    const s = document.createElement('div');
+    s.className = 'phase-step' + (i < current ? ' done' : i === current ? ' current' : '');
+    pi.appendChild(s);
+  }
+}
+
+function renderTimeline(ap) {
+  const svg = document.getElementById('timeline-svg');
+  const W = 700, H = 90, PAD_X = 20;
+  const times = ap.events_t;
+  const ic    = ap.events_ic;
+  if (!times || times.length === 0) return;
+
+  const tMax  = Math.max(...times, ap.ic_upper + 5);
+  const toPx  = t => PAD_X + (t / tMax) * (W - 2 * PAD_X);
+
+  let html = '';
+
+  // Fond IC (zone grisée = futur prédit)
+  const lastT = times[times.length - 1];
+  const x0 = toPx(lastT);
+  const xLo = toPx(ap.ic_lower + lastT);
+  const xHi = Math.min(toPx(ap.ic_upper + lastT), W - PAD_X);
+  // zone IC
+  html += `<rect x="${x0}" y="25" width="${xHi - x0}" height="36" rx="3" fill="rgba(77,168,255,.08)" stroke="rgba(77,168,255,.2)" stroke-width="1"/>`;
+  // médiane
+  const xMed = Math.min(toPx(ap.tau_pred + lastT), W - PAD_X);
+  html += `<line x1="${xMed}" y1="18" x2="${xMed}" y2="72" stroke="rgba(77,168,255,.6)" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+  html += `<text x="${xMed}" y="14" text-anchor="middle" font-size="9" fill="rgba(77,168,255,.7)" font-family="JetBrains Mono,monospace">τ̂=${ap.tau_pred}min</text>`;
+
+  // Axe
+  html += `<line x1="${PAD_X}" y1="58" x2="${W - PAD_X}" y2="58" stroke="#1e2738" stroke-width="1"/>`;
+
+  // Éclairs observés
+  times.forEach((t, i) => {
+    const x   = toPx(t);
+    const isIC = ic[i] === 1;
+    const col  = isIC ? 'var(--purple)' : 'var(--amber)';
+    const h    = isIC ? 24 : 18;
+    html += `<line x1="${x}" y1="${58 - h}" x2="${x}" y2="58" stroke="${col}" stroke-width="${isIC ? 2 : 1.5}" stroke-linecap="round"/>`;
+    html += `<circle cx="${x}" cy="${58 - h - 2}" r="${isIC ? 3 : 2}" fill="${col}"/>`;
+  });
+
+  // Légende
+  html += `<circle cx="30" cy="80" r="3" fill="var(--amber)"/>`;
+  html += `<text x="37" y="83" font-size="9" fill="#5a6a88" font-family="JetBrains Mono,monospace">CG</text>`;
+  html += `<circle cx="65" cy="80" r="3" fill="var(--purple)"/>`;
+  html += `<text x="72" y="83" font-size="9" fill="#5a6a88" font-family="JetBrains Mono,monospace">IC (intra-nuage)</text>`;
+  html += `<rect x="${x0+2}" y="76" width="40" height="9" rx="2" fill="rgba(77,168,255,.08)" stroke="rgba(77,168,255,.2)" stroke-width="1"/>`;
+  html += `<text x="${x0 + 22}" y="83" font-size="9" text-anchor="middle" fill="rgba(77,168,255,.7)" font-family="JetBrains Mono,monospace">IC 80%</text>`;
+
+  svg.innerHTML = html;
+}
+
+// ─── PANNEAU DROIT ───────────────────────────────────────────
+function renderRight(ap) {
+  const ml = document.getElementById('metrics-list');
+  const rows = [
+    ['Modèle',          'Hawkes + XGBoost v2'],
+    ['Hawkes τ̂',       ap.hawkes_pred + ' min'],
+    ['XGBoost τ̂',      ap.xgb_pred + ' min'],
+    ['Poids Hawkes',    ap.adaptive_w.toFixed(2) + ' (adaptatif)'],
+    ['CV Monte-Carlo',  ap.tau_cv.toFixed(2)],
+    ['IC lower',        ap.ic_lower + ' min'],
+    ['IC upper',        ap.ic_upper + ' min'],
+    ['Progress ratio',  (ap.progress * 100).toFixed(0) + '%'],
+    ['Éclairs observés', ap.n_events],
+  ];
+  ml.innerHTML = rows.map(([k, v]) =>
+    `<div class="metric-row"><span class="metric-key">${k}</span><span class="metric-val">${v}</span></div>`
+  ).join('');
+
+  // Log
+  const log = document.getElementById('alert-log');
+  const now = new Date();
+  const fmt = d => d.toUTCString().split(' ')[4];
+  const entries = [
+    { dt: new Date(now - 0),           msg: `τ̂ mis à jour : ${ap.tau_pred} min` },
+    { dt: new Date(now - 30000),       msg: `IC recalculé [${ap.ic_lower}–${ap.ic_upper}] min` },
+    { dt: new Date(now - 120000),      msg: `Nouveau éclair détecté (${ap.events_ic[ap.events_ic.length-1]?'IC':'CG'})` },
+    { dt: new Date(now - 300000),      msg: `Paramètres Hawkes : μ/α/β optimaux` },
+    { dt: new Date(now - 600000),      msg: `Alerte ouverte — ${ap.icao}` },
+  ];
+  log.innerHTML = entries.map(e =>
+    `<div class="log-entry"><span class="log-time">${fmt(e.dt)}</span><span class="log-msg">${e.msg}</span></div>`
+  ).join('');
+}
+
+// ─── RENDER ALL ──────────────────────────────────────────────
+function renderAll() {
+  renderAirportList();
+  const ap = AIRPORTS.find(a => a.id === selectedId);
+  if (ap) { renderCenter(ap); renderRight(ap); }
+}
+
+renderAll();
+
+// Simulation de mise à jour en temps réel (toutes les 8s)
+setInterval(() => {
+  const ap = AIRPORTS.find(a => a.id === selectedId);
+  if (!ap || ap.status === 'clear') return;
+  // Légère variation aléatoire pour simuler le temps réel
+  ap.tau_pred    = Math.max(1, ap.tau_pred + (Math.random() < 0.5 ? -1 : 0));
+  ap.p30         = Math.min(0.99, Math.max(0.01, ap.p30 + (Math.random() - 0.48) * 0.03));
+  ap.p60         = Math.min(0.99, Math.max(ap.p30 + 0.05, ap.p60 + (Math.random() - 0.48) * 0.02));
+  if (Math.random() < 0.3) {
+    const lastT = ap.events_t[ap.events_t.length - 1];
+    ap.events_t.push(lastT + 1 + Math.random() * 3);
+    ap.events_ic.push(Math.random() < 0.35 ? 1 : 0);
+    ap.n_events++;
+    ap.progress = Math.min(0.99, ap.progress + 0.01);
+  }
+  renderAll();
+}, 8000);
+</script>
+</body>
+</html>
